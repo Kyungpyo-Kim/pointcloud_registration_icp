@@ -30,9 +30,16 @@ public:
 
 private:
     void icp2d(
-        pcl::PointCloud<pcl::PointXY>::Ptr source,
-        pcl::PointCloud<pcl::PointXY>::Ptr target,
-        Eigen::Matrix4f& init_pose_results);
+        const pcl::PointCloud<pcl::PointXY>::Ptr source,
+        const pcl::PointCloud<pcl::PointXY>::Ptr target,
+        const float outlier_rejection_dist,
+        const float convergence_criterion_transformation_epsilon_translation,
+        const float convergence_criterion_transformation_epsilon_rotation,
+        const float convergence_criterion_euclidean_distance_difference_epsilon,
+        float & convergence_criterion_euclidean_distance_error,
+        Eigen::Matrix4f& init_pose_results,
+        bool & convergence,
+        int & iteration);
 
     void transformPointCloud2d (
         const pcl::PointCloud<pcl::PointXY> cloud_in, 

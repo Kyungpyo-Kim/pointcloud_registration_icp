@@ -55,8 +55,28 @@ void LayeredICP::SetTarget(pcl::PointCloud<pcl::PointXYZ>::Ptr target)
 
 void LayeredICP::Align(pcl::PointCloud<pcl::PointXYZ>& result){
     
-    std::cout << "icp-1-final_transformation_: " << std::endl << final_transformation_ << std::endl;
-    icp2d(source2d_, target2d_, final_transformation_);
+    float outlier_dist = 100.0;
+    float convergence_criterion_transformation_epsilon_translation = 1e-5;
+    float convergence_criterion_transformation_epsilon_rotation = 1e-8;
+    float convergence_criterion_euclidean_distance_difference_epsilon = 0.1;
+    float convergence_criterion_euclidean_distance_error = 0.02;
+    bool convergence;
+    int iteration = 100;
+
+    icp2d(source2d_,
+        target2d_,
+        outlier_dist,
+        convergence_criterion_transformation_epsilon_translation,
+        convergence_criterion_transformation_epsilon_rotation,
+        convergence_criterion_euclidean_distance_difference_epsilon,
+        convergence_criterion_euclidean_distance_error,
+        final_transformation_,
+        convergence,
+        iteration);
+
+    std::cout << "convergence: " << convergence << std::endl;
+    std::cout << "iteration: " << iteration << std::endl;
+    std::cout << "convergence_criterion_eucliean_distance_error: " << convergence_criterion_euclidean_distance_error << std::endl;
     std::cout << "icp-2-final_transformation_: " << std::endl << final_transformation_ << std::endl;
 
     result.clear();
@@ -70,13 +90,24 @@ Eigen::Matrix4f LayeredICP::GetFinalTransformation(void) { return final_transfor
 
 
 void LayeredICP::icp2d(
-    pcl::PointCloud<pcl::PointXY>::Ptr source,
-    pcl::PointCloud<pcl::PointXY>::Ptr target,
-    Eigen::Matrix4f& init_pose_results)
+    const pcl::PointCloud<pcl::PointXY>::Ptr source,
+    const pcl::PointCloud<pcl::PointXY>::Ptr target,
+    const float outlier_rejection_dist,
+    const float convergence_criterion_transformation_epsilon_translation,
+    const float convergence_criterion_transformation_epsilon_rotation,
+    const float convergence_criterion_euclidean_distance_difference_epsilon,
+    float & convergence_criterion_euclidean_distance_error,
+    Eigen::Matrix4f& init_pose_results,
+    bool & convergence,
+    int & iteration)
 {
     /// paramters
-    int iteration = 1000;
-    float outlier_dist = 100.0;
+    // int iteration = 50;
+    // float outlier_dist = 100.0;
+    // float convergence_criterion_transformation_epsilon_translation = 1e-5;
+    // float convergence_criterion_transformation_epsilon_rotation = 1e-8;
+    // float convergence_criterion_eucliean_distance_difference_epsilon = 0.1;
+    // float convergence_criterion_eucliean_distance_error = 0.1;
 
     // enum methods {
     //     SVD = 0,
@@ -85,6 +116,7 @@ void LayeredICP::icp2d(
     // };
     // methods method = 0;
 
+    convergence = false;
 
     pcl::PointCloud<pcl::PointXY>::Ptr source_trans (new pcl::PointCloud<pcl::PointXY>);
         
@@ -94,6 +126,9 @@ void LayeredICP::icp2d(
     /// * find correspondance using KDTree based NN search
     pcl::search::Search<pcl::PointXY>* kdtree = new pcl::search::KdTree<pcl::PointXY> ();
     kdtree->setInputCloud(target);
+
+    static Eigen::Matrix4f transformation_prev = init_pose_results;
+    static float prev_rmse = 0;
 
     for (size_t i = 0; i < iteration; ++i)
     {
@@ -116,7 +151,7 @@ void LayeredICP::icp2d(
                 return;
             }
             /// * reject outliers
-            if (outlier_dist*outlier_dist > dists[j][0])
+            if (outlier_rejection_dist*outlier_rejection_dist > dists[j][0])
             {
                 trg->push_back(target->at(indices[j][0]));
                 src->push_back(source_trans->at(j));
@@ -135,16 +170,65 @@ void LayeredICP::icp2d(
         /// * find optimized transformation using SVD
         Eigen::Matrix4f transformation_est;
         estimateTransformationSVD(*src, *trg, transformation_est);
-
-        source_trans -> clear();
-
         out_transformation = transformation_est * out_transformation;
-        std::cout << "out_transformation" << std::endl << out_transformation << std::endl;
+
+        /// update source points
+        source_trans -> clear();
+        
         transformPointCloud2d (*source, *source_trans, out_transformation);
+
+        /// Check convergence
+        Eigen::Matrix4f transformation_epsilon;
+        transformation_epsilon = out_transformation - transformation_prev;
+
+        float transformation_epsilon_translation = pow(transformation_epsilon(0,3),2) + pow(transformation_epsilon(1,3),2);
+        float transformation_epsilon_rotation = pow(transformation_epsilon(0,0),2) + pow(transformation_epsilon(0,1),2)
+                                        + pow(transformation_epsilon(1,0),2) + pow(transformation_epsilon(1,1),2);
+
+        pcl::PointCloud<pcl::PointXY>::Ptr src_trans (new pcl::PointCloud<pcl::PointXY>);
+        transformPointCloud2d (*src, *src_trans, transformation_est);
+
+        float euclidean_dist_epsilon = 0.0;
+
+        float rmse = 0.0;
+
+        size_t num_of_points = src->size();
+        
+        for (size_t j = 0; j < num_of_points; ++j)
+        {
+            rmse += pow(src_trans->at(j).x - trg->at(j).x, 2);
+            rmse += pow(src_trans->at(j).y - trg->at(j).y, 2);
+
+            euclidean_dist_epsilon += pow(src_trans->at(j).x - src->at(j).x, 2);
+            euclidean_dist_epsilon += pow(src_trans->at(j).x - src->at(j).x, 2);
+        }
+        rmse /= (float)num_of_points;
+        euclidean_dist_epsilon /= (float)num_of_points;
+
+        float rmse_epsilon = pow(rmse - prev_rmse, 2);
+
+        // std::cout << "transformation_epsilon_translation: " << transformation_epsilon_translation << std::endl;
+        // std::cout << "transformation_epsilon_rotation: " << transformation_epsilon_rotation << std::endl;
+        // std::cout << "rmse: " << rmse << std::endl;
+        // std::cout << "rmse_epsilon: " << rmse_epsilon << std::endl;
+
+        if (convergence_criterion_transformation_epsilon_translation > transformation_epsilon_translation &&
+        convergence_criterion_transformation_epsilon_rotation > transformation_epsilon_rotation &&
+        convergence_criterion_euclidean_distance_difference_epsilon > euclidean_dist_epsilon && 
+        convergence_criterion_euclidean_distance_error > rmse)
+        {
+            convergence = true;
+            iteration = i;
+            convergence_criterion_euclidean_distance_error = rmse;
+            break;
+        }
+        
+        transformation_prev = out_transformation;
     }
 
     init_pose_results = out_transformation;
 }
+
 
 void LayeredICP::transformPointCloud2d (
     const pcl::PointCloud<pcl::PointXY> cloud_in, 
@@ -165,7 +249,6 @@ void LayeredICP::transformPointCloud2d (
         cloud_out.push_back(p2d);
     }
 }
-
 
 
 void LayeredICP::estimateTransformationSVD(
@@ -198,9 +281,9 @@ void LayeredICP::estimateTransformationSVD(
     centeroid_trg(0,0)  = center_trg.x;
     centeroid_trg(1,0)  = center_trg.y;
 
-    std::cout << "centeroid_src, centeroid_trg" << std::endl;
-    std::cout << centeroid_src << std::endl;
-    std::cout << centeroid_trg << std::endl;
+    // std::cout << "centeroid_src, centeroid_trg" << std::endl;
+    // std::cout << centeroid_src << std::endl;
+    // std::cout << centeroid_trg << std::endl;
     
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic> cloud_src_demean, cloud_trg_demean;
 
@@ -241,23 +324,18 @@ void LayeredICP::estimateTransformationSVD(
 
     Eigen::Matrix<float, 2, 2> R = v * u.transpose ();
 
-    // R(0,0) = 1.0;
-    // R(0,1) = 0.0;
-    // R(1,0) = 0.0;
-    // R(1,1) = 1.0;
-
     // Return the correct translation
     transformation_matrix.topLeftCorner (2, 2) = R;
 
-    std::cout << "R" << std::endl << R << std::endl;
-    std::cout << "centeroid_src" << std::endl << centeroid_src << std::endl;
+    // std::cout << "R" << std::endl << R << std::endl;
+    // std::cout << "centeroid_src" << std::endl << centeroid_src << std::endl;
     const Eigen::Matrix<float, 2, 1> Rc (R * centeroid_src);
-    std::cout << "transformation_matrix" << std::endl << transformation_matrix << std::endl;
+    // std::cout << "transformation_matrix" << std::endl << transformation_matrix << std::endl;
     transformation_matrix(0,3) = centeroid_trg(0,0) - Rc(0,0);
     transformation_matrix(1,3) = centeroid_trg(1,0) - Rc(1,0);
-    std::cout << "transformation_matrix" << std::endl << transformation_matrix << std::endl;
-
+    // std::cout << "transformation_matrix" << std::endl << transformation_matrix << std::endl;
 }
+
 
 void LayeredICP::computeCentroid2d(
     const pcl::PointCloud<pcl::PointXY> &in_cloud, 

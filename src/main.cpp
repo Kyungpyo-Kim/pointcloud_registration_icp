@@ -5,9 +5,11 @@
 #include <ctime>
 #include <algorithm>
 #include <random>
+#include <time.h>
 
 ///boost
 #include <boost/thread/thread.hpp>
+#include <boost/format.hpp> 
 
 /// pcl
 #include <pcl/visualization/pcl_visualizer.h>
@@ -80,9 +82,17 @@ int main (int argc, char** argv)
 
     /// registration using pcl-icp        
     double icp_max_dist_corrs_prev_ = 100;
-    double icp_max_num_iter_prev_ = 100;
-    double icp_max_tf_diff_prev_ = 1e-6;
+    double icp_max_num_iter_prev_ = 1000;
+    double icp_max_tf_diff_prev_ = 1e-8;
     double icp_max_eculi_dist_diff_prev_ = 0.01;
+
+    // float outlier_dist = 100.0;
+    // float convergence_criterion_transformation_epsilon_translation = 1e-5;
+    // float convergence_criterion_transformation_epsilon_rotation = 1e-8;
+    // float convergence_criterion_eucliean_distance_difference_epsilon = 0.01;
+    // float convergence_criterion_eucliean_distance_error = 0.02;
+    // bool convergence;
+    // int iteration = 1000;
 
     pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp_pcl;
     // Set the input source and target
@@ -100,23 +110,32 @@ int main (int argc, char** argv)
     icp_pcl.setEuclideanFitnessEpsilon (icp_max_eculi_dist_diff_prev_);
     
     // Perform the alignment
+    clock_t tStart = clock();
     icp_pcl.align (*results_pcl_icp);
+    std::cout << boost::format("\n\n  - Execution time for PCL ICP: %1%") % ((double)(clock() - tStart)/CLOCKS_PER_SEC) << std::endl;
+    std::cout << "convergence: " << icp_pcl.hasConverged() << std::endl << " score: " <<  icp_pcl.getFitnessScore() << std::endl;
+
     Eigen::Matrix4f trans_pcl_icp = icp_pcl.getFinalTransformation ();
-    std::cout << "cloud_target size: " << cloud_target->size() << std::endl;
      
     /// icp 2d
     LayeredICP icp;
     icp.SetSource(cloud_source);
     icp.SetTarget(cloud_target);
-    icp.Align(*results_layered_icp);
-    Eigen::Matrix4f trans_layered_icp = icp.GetFinalTransformation();
-    std::cout << "main-1-trans_layered_icp: " << trans_layered_icp << std::endl;
-    
-    std::cout << "transformation: " << std::endl << transformation.matrix() << std::endl;
-    std::cout << "trans_pcl_icp: " << std::endl << trans_pcl_icp << std::endl;
-    std::cout << "trans_layered_icp: " << std::endl << trans_layered_icp << std::endl;
 
-    std::cout << "cloud_target size: " << cloud_target->size() << std::endl;
+    tStart = clock();
+    icp.Align(*results_layered_icp);
+
+    std::cout << boost::format("\n\n  - Execution time for ICP: %1%") % ((double)(clock() - tStart)/CLOCKS_PER_SEC) << std::endl;
+    std::cout << boost::format("\n\n  - Execution time for ICP: %1%") % ((double)(clock() - tStart)/CLOCKS_PER_SEC) << std::endl;
+    Eigen::Matrix4f trans_layered_icp = icp.GetFinalTransformation();
+    
+    // std::cout << "main-1-trans_layered_icp: " << trans_layered_icp << std::endl;
+    
+    // std::cout << "transformation: " << std::endl << transformation.matrix() << std::endl;
+    // std::cout << "trans_pcl_icp: " << std::endl << trans_pcl_icp << std::endl;
+    // std::cout << "trans_layered_icp: " << std::endl << trans_layered_icp << std::endl;
+
+    // std::cout << "cloud_target size: " << cloud_target->size() << std::endl;
 
     pcl::visualization::PCLVisualizer* viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
     // Define R,G,B colors for the point cloud
