@@ -34,7 +34,7 @@ int main (int argc, char** argv)
     {
         std::cout << "\n\n\n[Arguments error]" << std::endl;
         std::cout << "Check arguments!" << std::endl;
-        std::cout << "  ex) ./icp_demo [data_file_pat]\n\n\n";
+        std::cout << "  ex) ./icp_demo [data_file_path]\n\n\n";
 
         exit(1);
     }
@@ -65,7 +65,7 @@ int main (int argc, char** argv)
     float trans_x = ( (float)( rand() % 10000 ) ) / (1000.f);
     float trans_y = ( (float)( rand() % 10000 ) ) / (1000.f);
 
-    transformation.translation() << trans_x, trans_x, 0.f;
+    transformation.translation() << trans_x, trans_y, 0.f;
 
     float theta = ( (float)( rand() % 100 ) ) / (100.f);
     transformation.rotate (Eigen::AngleAxisf (theta, Eigen::Vector3f::UnitZ()));

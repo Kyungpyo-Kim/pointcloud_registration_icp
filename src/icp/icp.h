@@ -9,6 +9,9 @@
 #include <pcl/common/io.h>
 #include <pcl/search/pcl_search.h>
 
+#include <pcl/registration/transformation_estimation_svd.h>
+#include <pcl/registration/transformation_estimation_dual_quaternion.h>
+#include <pcl/registration/transformation_estimation_lm.h>
 
 
 class LayeredICP
@@ -35,6 +38,15 @@ private:
         const pcl::PointCloud<pcl::PointXY> cloud_in, 
         pcl::PointCloud<pcl::PointXY> &cloud_out,
         Eigen::Matrix4f transform);
+    
+    void estimateTransformationSVD(
+        const pcl::PointCloud<pcl::PointXY> &cloud_src,
+        const pcl::PointCloud<pcl::PointXY> &cloud_trg,
+        Eigen::Matrix4f &transformation_matrix);
+
+    void computeCentroid2d(
+        const pcl::PointCloud<pcl::PointXY> &in_cloud, 
+        pcl::PointXY &out_centroid);
 
 private:
     pcl::PointCloud<pcl::PointXYZ>::Ptr source_;
